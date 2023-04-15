@@ -1,0 +1,4 @@
+PyQt5
+lyricsgenius
+pygame
+audio_metadata
