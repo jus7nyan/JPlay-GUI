@@ -1,10 +1,53 @@
-
 from PyQt5 import QtWidgets, QtCore, QtGui
 
 import sys
 
 import audio
 
+import time
+
+class MyLoop(QtCore.QThread):
+    def __init__(self, parent= ...) -> None:
+        super().__init__(parent)
+        self.app=None
+    
+    def run(self) -> None:
+        while True:
+            inf = self.app.player.get_info()
+            ind = inf[1]
+            lst = inf[3]
+            dur = lst["metadata"][ind].length
+
+            pos = self.app.player.mixer.get_pos()/1000
+            # dur = lst.keys()
+            l = [pos,dur]
+
+            sec0_all = l[0]
+            sec = l[0] % (24*3600)
+            hour = round(sec // 3600)
+            sec = sec % 3600
+            min = round(sec // 60)
+            sec = round(sec % 60)
+
+            sec1_all = l[1]
+            sec1 = l[1] % (24*3600)
+            hour1 = round(sec1 // 3600)
+            sec1 = sec1 % 3600
+            min1 = round(sec1 // 60)
+            sec1 = round(sec1 % 60)
+
+            if (hour == 23) and (min == 59) and (sec == 60):
+                self.app.next()
+                continue
+            elif (hour != 0 and min != 0):
+                self.app.time.setText(f"{hour}:{min}:{sec} / {hour1}:{min1}:{sec1}")
+                self.app.time_slider.setValue(int((100/sec1_all)*sec0_all))
+            else:
+                self.app.time.setText(f"{min}:{sec} / {min1}:{sec1}")
+                self.app.time_slider.setValue(int((100/sec1_all)*sec0_all))
+
+            
+            time.sleep(0.3)
 
 class App:
     def __init__(self) -> None:
@@ -17,7 +60,7 @@ class App:
 
         self.window.setWindowTitle("JPlay")
         self.window.setFixedSize(int(210),int(290))
-        self.window.move(1020,5)
+        # self.window.move(1020,5)
 
         self.vol_save = 100
 
@@ -31,12 +74,28 @@ class App:
         self.window.setStyleSheet("background-color: #111111")
         self.window.setWindowFlags(QtCore.Qt.WindowType.FramelessWindowHint)
 
-        self.slider = QtWidgets.QSlider(QtCore.Qt.Vertical, parent=self.window)
-        self.slider.setFixedSize(25,125)
-        self.slider.move(99+25+25+25,25)
-        self.slider.setValue(100)
-        self.slider.setMaximum(100)
-        self.slider.valueChanged.connect(self.set_vol)
+        self.vol_slider = QtWidgets.QSlider(QtCore.Qt.Vertical, parent=self.window)
+        self.vol_slider.setFixedSize(25,110)
+        self.vol_slider.move(99+25+25+25,25)
+        self.vol_slider.setValue(100)
+        self.vol_slider.setMaximum(100)
+        self.vol_slider.valueChanged.connect(self.set_vol)
+
+        self.time = QtWidgets.QLabel(parent=self.window)
+        self.time.setStyleSheet("color: #979797")
+        self.time.setText("shadsa")
+        self.time.setFixedSize(60,35)
+        self.time.move(105-30,195)
+
+        self.time_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, parent=self.window)
+        self.time_slider.setFixedSize(135,15)
+        self.time_slider.move(105-70,220)
+        self.time_slider.setValue(0)
+        self.time_slider.setMaximum(100)
+        self.time_slider.setDisabled(True)
+        # self.time_slider.setStyleSheet("")
+
+
 
         self.qsh = QtWidgets.QShortcut(QtGui.QKeySequence("Q"),self.window)
         self.qsh.activated.connect(sys.exit)
@@ -64,7 +123,7 @@ class App:
 
         self.title = QtWidgets.QLabel("Just Player GUI",parent=self.window)
         self.title.setStyleSheet("color: #979797")
-        self.title.setFixedSize(210,25)
+        self.title.setFixedSize(210,30)
         self.title.move(0,-5)
         self.title.setAlignment(QtCore.Qt.AlignCenter)
 
@@ -89,10 +148,15 @@ class App:
         self.song_name.setText(sng)
 
 
-        self.btnpre = self.btn(clicked=self.pervious, icon="resources/p.png",pos=(33,225))
-        self.btnpp = self.btn(clicked=self.plpa, icon="resources/pause.png",pos=(66+25,225))
-        self.btnn = self.btn(clicked=self.next, icon="resources/n.png",pos=(99+25+25,225))
+        self.btnpre = self.btn(clicked=self.pervious, icon="resources/p.png",pos=(33,240))
+        self.btnpp = self.btn(clicked=self.plpa, icon="resources/pause.png",pos=(66+25,240))
+        self.btnn = self.btn(clicked=self.next, icon="resources/n.png",pos=(99+25+25,240))
 
+        self.btn_sound = self.btn(clicked=self.mute,icon="resources/sound.png",pos=(99+25+25+25,135))
+
+        self.loop = MyLoop(parent=self.window)
+        self.loop.app = self
+        self.loop.start()
 
         self.window.show()
         sys.exit(self.app.exec_())
@@ -159,23 +223,25 @@ class App:
     def up_vol(self):
         vol = self.player.up_vol(0.04)
         # print(vol)
-        self.slider.setValue(int(vol*100))
+        self.vol_slider.setValue(int(vol*100))
     
     def down_vol(self):
         vol = self.player.down_vol(0.01)
         # print(vol)
-        self.slider.setValue(int(vol*100))
+        self.vol_slider.setValue(int(vol*100))
     
     def set_vol(self):
-        self.player.mixer.set_volume(self.slider.value()/100)
+        self.player.mixer.set_volume(self.vol_slider.value()/100)
     
     def mute(self):
-        if self.slider.value() != 0:
-            self.vol_save = self.slider.value()
-            self.slider.setValue(0)
+        if self.vol_slider.value() != 0:
+            self.vol_save = self.vol_slider.value()
+            self.vol_slider.setValue(0)
             self.player.mixer.set_volume(0)
+            self.btn_sound.setIcon(QtGui.QIcon("resources/mute.png"))
         else:
-            self.slider.setValue(self.vol_save)
+            self.vol_slider.setValue(self.vol_save)
             self.player.mixer.set_volume(self.vol_save/100)
+            self.btn_sound.setIcon(QtGui.QIcon("resources/sound.png"))
 if __name__ == "__main__":
     jplay = App()
